@@ -110,13 +110,14 @@ class AuthHook(PecanHook):
         if state.request.method == 'OPTIONS':
             return
 
-        user_db = self._validate_creds_and_get_user(request=state.request)
+        if cfg.CONF.auth.enable:
+            user_db = self._validate_creds_and_get_user(request=state.request)
 
-        # Store related user object in the context. The token is not passed
-        # along any longer as that should only be used in the auth domain.
-        state.request.context['auth'] = {
-            'user': user_db
-        }
+            # Store related user object in the context. The token is not passed
+            # along any longer as that should only be used in the auth domain.
+            state.request.context['auth'] = {
+                'user': user_db
+            }
 
         if QUERY_PARAM_ATTRIBUTE_NAME in state.arguments.keywords:
             del state.arguments.keywords[QUERY_PARAM_ATTRIBUTE_NAME]
