@@ -15,15 +15,14 @@
 
 import base64
 
-import pecan
-from pecan import rest
+import flask
 from six.moves import http_client
 from oslo_config import cfg
 
 from st2common.exceptions.auth import TTLTooLargeException
-from st2common.models.api.base import jsexpose
 from st2common.models.api.auth import TokenAPI
 from st2common.services.access import create_token
+from st2common.util.jsonify import json_encode
 from st2common import log as logging
 from st2auth.backends import get_backend_instance
 
@@ -31,7 +30,7 @@ from st2auth.backends import get_backend_instance
 LOG = logging.getLogger(__name__)
 
 
-class TokenController(rest.RestController):
+class TokenController(object):
     def __init__(self, *args, **kwargs):
         super(TokenController, self).__init__(*args, **kwargs)
 
@@ -40,7 +39,6 @@ class TokenController(rest.RestController):
         else:
             self._auth_backend = None
 
-    @jsexpose(body_cls=TokenAPI, status_code=http_client.CREATED)
     def post(self, request, **kwargs):
         if cfg.CONF.auth.mode == 'proxy':
             return self._handle_proxy_auth(request=request, **kwargs)
@@ -48,13 +46,13 @@ class TokenController(rest.RestController):
             return self._handle_standalone_auth(request=request, **kwargs)
 
     def _handle_proxy_auth(self, request, **kwargs):
-        remote_addr = pecan.request.headers.get('x-forwarded-for', pecan.request.remote_addr)
+        remote_addr = flask.request.headers.get('x-forwarded-for', flask.request.remote_addr)
         extra = {'remote_addr': remote_addr}
 
-        if pecan.request.remote_user:
+        if flask.request.remote_user:
             ttl = getattr(request, 'ttl', None)
             try:
-                token = self._create_token_for_user(username=pecan.request.remote_user, ttl=ttl)
+                token = self._create_token_for_user(username=flask.request.remote_user, ttl=ttl)
             except TTLTooLargeException as e:
                 self._abort_request(status_code=http_client.BAD_REQUEST,
                                     message=e.message)
@@ -64,10 +62,10 @@ class TokenController(rest.RestController):
         self._abort_request()
 
     def _handle_standalone_auth(self, request, **kwargs):
-        authorization = pecan.request.authorization
+        authorization = flask.request.authorization
 
         auth_backend = self._auth_backend.__class__.__name__
-        remote_addr = pecan.request.remote_addr
+        remote_addr = flask.request.remote_addr
         extra = {'auth_backend': auth_backend, 'remote_addr': remote_addr}
 
         if not authorization:
@@ -75,34 +73,12 @@ class TokenController(rest.RestController):
             self._abort_request()
             return
 
-        auth_type, auth_value = authorization
-        if auth_type.lower() not in ['basic']:
-            extra['auth_type'] = auth_type
-            LOG.audit('Unsupported authorization type: %s' % (auth_type), extra=extra)
-            self._abort_request()
-            return
-
-        try:
-            auth_value = base64.b64decode(auth_value)
-        except Exception:
-            LOG.audit('Invalid authorization header', extra=extra)
-            self._abort_request()
-            return
-
-        split = auth_value.split(':')
-        if len(split) != 2:
-            LOG.audit('Invalid authorization header', extra=extra)
-            self._abort_request()
-            return
-
-        username, password = split
-        result = self._auth_backend
-
-        result = self._auth_backend.authenticate(username=username, password=password)
+        result = self._auth_backend.authenticate(username=authorization.username,
+                                                 password=authorization.password)
         if result is True:
             ttl = getattr(request, 'ttl', None)
             try:
-                token = self._create_token_for_user(username=username, ttl=ttl)
+                token = self._create_token_for_user(username=authorization.username, ttl=ttl)
                 return self._process_successful_response(token=token)
             except TTLTooLargeException as e:
                 self._abort_request(status_code=http_client.BAD_REQUEST,
@@ -114,13 +90,16 @@ class TokenController(rest.RestController):
 
     def _abort_request(self, status_code=http_client.UNAUTHORIZED,
                        message='Invalid or missing credentials'):
-        pecan.abort(status_code, message)
+        flask.abort(status_code, message)
 
     def _process_successful_response(self, token):
         api_url = cfg.CONF.auth.api_url
-        pecan.response.headers['X-API-URL'] = api_url
-        return token
+        resp = flask.Response(json_encode(token))
+        resp.headers['X-API-URL'] = api_url
+        return resp
 
     def _create_token_for_user(self, username, ttl=None):
         tokendb = create_token(username=username, ttl=ttl)
         return TokenAPI.from_model(tokendb)
+
+token_controller = TokenController()

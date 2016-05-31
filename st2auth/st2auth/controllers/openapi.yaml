@@ -1,0 +1,79 @@
+# Example YAML to get you started quickly.
+# Be aware that YAML has indentation based scoping.
+# Code completion support is available so start typing for available options.
+swagger: '2.0'
+
+# This is your document metadata
+info:
+  version: "1.0.0"
+  title: StackStorm st2auth API
+
+paths:
+  /token:
+    post:
+      operationId: st2auth.controllers.v1.auth.token_controller.post
+      description: |
+        Authenticates a user with `Authorization` header and returns a `token`
+        object.
+      parameters:
+        - name: authorization
+          in: header
+          description: base64 encoded string containing login and password
+          required: true
+          type: string
+        - name: request
+          in: body
+          description: Lifespan of the token
+          schema:
+            type: object
+            properties:
+              ttl:
+                type: integer
+      responses:
+        201:
+          description: New token has been created
+          schema:
+            $ref: '#/definitions/Token'
+          headers:
+            x-api-url:
+              type: string
+          examples:
+            application/json:
+              user: st2admin
+              token: '5e86421776f946e98faea36c29e5a7c7'
+              expiry: '2016-05-28T12:39:28.650231Z'
+              id: '574840001878c10d0b6e8fbf'
+              metadata: {}
+        401:
+          description: Invalid or missing credentials has been provided
+          schema:
+            $ref: '#/definitions/Error'
+          examples:
+            application/json:
+              faultstring: Invalid or missing credentials
+        default:
+          description: Unexpected error
+          schema:
+            $ref: '#/definitions/Error'
+
+definitions:
+  Token:
+    type: object
+    properties:
+      expiry:
+        type: string
+        format: datetime
+      id:
+        type: string
+        format: uuid
+      metadata:
+        type: object
+      token:
+        type: string
+      user:
+        type: string
+  Error:
+    type: object
+    properties:
+      faultstring:
+        type: string

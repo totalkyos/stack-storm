@@ -13,7 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import pecan
+import connexion
+import os
 from oslo_config import cfg
 
 from st2auth import config as st2auth_config
@@ -24,24 +25,11 @@ from st2common.constants.system import VERSION_STRING
 from st2common.service_setup import setup as common_setup
 
 LOG = logging.getLogger(__name__)
-
-
-def _get_pecan_config():
-
-    config = {
-        'app': {
-            'root': 'st2auth.controllers.root.RootController',
-            'modules': ['st2auth'],
-            'debug': cfg.CONF.auth.debug,
-            'errors': {'__force_dict__': True}
-        }
-    }
-
-    return pecan.configuration.conf_from_dict(config)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 def setup_app(config=None):
-    LOG.info('Creating st2auth: %s as Pecan app.', VERSION_STRING)
+    LOG.info('Creating st2auth: %s as OpenAPI app.', VERSION_STRING)
 
     is_gunicorn = getattr(config, 'is_gunicorn', False)
     if is_gunicorn:
@@ -61,22 +49,10 @@ def setup_app(config=None):
                      run_migrations=False,
                      config_args=config.config_args)
 
-    if not config:
-        # standalone HTTP server case
-        config = _get_pecan_config()
-    else:
-        # gunicorn case
-        if is_gunicorn:
-            config.app = _get_pecan_config().app
+    app = connexion.App(__name__, specification_dir=os.path.join(BASE_DIR, 'controllers/'))
 
-    app_conf = dict(config.app)
+    app.add_api('openapi.yaml')
 
-    app = pecan.make_app(
-        app_conf.pop('root'),
-        logging=getattr(config, 'logging', {}),
-        hooks=[hooks.JSONErrorResponseHook(), hooks.CorsHook()],
-        **app_conf
-    )
     LOG.info('%s app created.' % __name__)
 
     return app
