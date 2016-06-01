@@ -11,7 +11,7 @@ info:
 paths:
   /token:
     post:
-      operationId: st2auth.controllers.v1.auth.token_controller.post
+      operationId: st2auth.controllers.v1.auth:token_controller.post
       description: |
         Authenticates a user with `Authorization` header and returns a `token`
         object.
@@ -21,6 +21,10 @@ paths:
           description: base64 encoded string containing login and password
           required: true
           type: string
+        - name: x-forwarded-for
+          in: header
+          description: set externally to indicate real source of the request
+          type: string
         - name: request
           in: body
           description: Lifespan of the token
@@ -29,8 +33,17 @@ paths:
             properties:
               ttl:
                 type: integer
+      x-parameters:
+        - name: remote_addr
+          in: environ
+          description: source of the request
+          type: string
+        - name: remote_user
+          in: environ
+          description: set externally to indicate user identity in case of proxy auth
+          type: string
       responses:
-        201:
+        '201':
           description: New token has been created
           schema:
             $ref: '#/definitions/Token'
@@ -44,7 +57,7 @@ paths:
               expiry: '2016-05-28T12:39:28.650231Z'
               id: '574840001878c10d0b6e8fbf'
               metadata: {}
-        401:
+        '401':
           description: Invalid or missing credentials has been provided
           schema:
             $ref: '#/definitions/Error'

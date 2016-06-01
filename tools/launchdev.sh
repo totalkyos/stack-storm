@@ -198,8 +198,8 @@ function st2start(){
     elif [ "${use_gunicorn}" = true ]; then
         echo '  using gunicorn to run st2-auth...'
         export ST2_CONFIG_PATH=${ST2_CONF}
-        screen -d -m -S st2-auth ./virtualenv/bin/gunicorn_pecan \
-            ./st2auth/st2auth/gunicorn_config.py -k eventlet -b 0.0.0.0:9100 --workers 1
+        screen -d -m -S st2-auth ./virtualenv/bin/gunicorn \
+            st2auth.wsgi:application -k eventlet -b 0.0.0.0:9100 --workers 1
     else
         screen -d -m -S st2-auth ./virtualenv/bin/python \
         ./st2auth/bin/st2auth \

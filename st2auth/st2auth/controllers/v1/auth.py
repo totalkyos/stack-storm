@@ -15,9 +15,9 @@
 
 import base64
 
-import flask
 from six.moves import http_client
 from oslo_config import cfg
+from webob import exc, Response
 
 from st2common.exceptions.auth import TTLTooLargeException
 from st2common.models.api.auth import TokenAPI
@@ -45,57 +45,74 @@ class TokenController(object):
         elif cfg.CONF.auth.mode == 'standalone':
             return self._handle_standalone_auth(request=request, **kwargs)
 
-    def _handle_proxy_auth(self, request, **kwargs):
-        remote_addr = flask.request.headers.get('x-forwarded-for', flask.request.remote_addr)
+    def _handle_proxy_auth(self, request, remote_user, **kwargs):
+        remote_addr = kwargs.get('x-forwarded-for', kwargs.get('remote_addr'))
         extra = {'remote_addr': remote_addr}
 
-        if flask.request.remote_user:
+        if remote_user:
             ttl = getattr(request, 'ttl', None)
             try:
-                token = self._create_token_for_user(username=flask.request.remote_user, ttl=ttl)
+                token = self._create_token_for_user(username=remote_user, ttl=ttl)
             except TTLTooLargeException as e:
-                self._abort_request(status_code=http_client.BAD_REQUEST,
-                                    message=e.message)
+                raise exc.HTTPBadRequest(detail=e.message)
             return self._process_successful_response(token=token)
 
         LOG.audit('Access denied to anonymous user.', extra=extra)
-        self._abort_request()
+        self._abort_unauthorized()
 
-    def _handle_standalone_auth(self, request, **kwargs):
-        authorization = flask.request.authorization
-
+    def _handle_standalone_auth(self, request, authorization, **kwargs):
         auth_backend = self._auth_backend.__class__.__name__
-        remote_addr = flask.request.remote_addr
+        remote_addr = kwargs.get('remote_addr')
         extra = {'auth_backend': auth_backend, 'remote_addr': remote_addr}
 
         if not authorization:
             LOG.audit('Authorization header not provided', extra=extra)
-            self._abort_request()
+            self._abort_unauthorized()
             return
 
-        result = self._auth_backend.authenticate(username=authorization.username,
-                                                 password=authorization.password)
+        auth_type, auth_value = authorization.split(' ')
+        if auth_type.lower() not in ['basic']:
+            extra['auth_type'] = auth_type
+            LOG.audit('Unsupported authorization type: %s' % (auth_type), extra=extra)
+            self._abort_unauthorized()
+            return
+
+        try:
+            auth_value = base64.b64decode(auth_value)
+        except Exception:
+            LOG.audit('Invalid authorization header', extra=extra)
+            self._abort_unauthorized()
+            return
+
+        split = auth_value.split(':')
+        if len(split) != 2:
+            LOG.audit('Invalid authorization header', extra=extra)
+            self._abort_unauthorized()
+            return
+
+        username, password = split
+
+        result = self._auth_backend.authenticate(username=username, password=password)
+
         if result is True:
             ttl = getattr(request, 'ttl', None)
             try:
-                token = self._create_token_for_user(username=authorization.username, ttl=ttl)
+                token = self._create_token_for_user(username=username, ttl=ttl)
                 return self._process_successful_response(token=token)
             except TTLTooLargeException as e:
-                self._abort_request(status_code=http_client.BAD_REQUEST,
-                                    message=e.message)
-                return
+                raise exc.HTTPBadRequest(detail=e.message)
 
         LOG.audit('Invalid credentials provided', extra=extra)
-        self._abort_request()
+        self._abort_unauthorized()
 
-    def _abort_request(self, status_code=http_client.UNAUTHORIZED,
-                       message='Invalid or missing credentials'):
-        flask.abort(status_code, message)
+    def _abort_unauthorized(self):
+        raise exc.HTTPUnauthorized(detail='Invalid or missing credentials')
 
     def _process_successful_response(self, token):
-        api_url = cfg.CONF.auth.api_url
-        resp = flask.Response(json_encode(token))
-        resp.headers['X-API-URL'] = api_url
+        resp = Response(json_encode(token),
+                        content_type='application/json',
+                        status=http_client.CREATED)
+        resp.headers['X-API-URL'] = cfg.CONF.auth.api_url
         return resp
 
     def _create_token_for_user(self, username, ttl=None):
