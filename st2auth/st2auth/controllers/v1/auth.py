@@ -50,7 +50,7 @@ class TokenController(object):
         extra = {'remote_addr': remote_addr}
 
         if remote_user:
-            ttl = getattr(request, 'ttl', None)
+            ttl = request.get('ttl', None)
             try:
                 token = self._create_token_for_user(username=remote_user, ttl=ttl)
             except TTLTooLargeException as e:
@@ -95,7 +95,7 @@ class TokenController(object):
         result = self._auth_backend.authenticate(username=username, password=password)
 
         if result is True:
-            ttl = getattr(request, 'ttl', None)
+            ttl = request.get('ttl', None)
             try:
                 token = self._create_token_for_user(username=username, ttl=ttl)
                 return self._process_successful_response(token=token)
