@@ -30,10 +30,7 @@ paths:
           in: body
           description: Lifespan of the token
           schema:
-            type: object
-            properties:
-              ttl:
-                type: integer
+            $ref: '#/definitions/TokenRequest'
       x-parameters:
         - name: remote_addr
           in: environ
@@ -71,6 +68,14 @@ paths:
             $ref: '#/definitions/Error'
 
 definitions:
+  TokenRequest:
+    type: object
+    properties:
+      ttl:
+        type:
+          - integer
+          - 'null'
+        minimum: 1
   Token:
     type: object
     properties:

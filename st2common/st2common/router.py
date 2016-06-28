@@ -1,12 +1,29 @@
+# Licensed to the StackStorm, Inc ('StackStorm') under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import copy
 import functools
 import os
 import six
 import sys
+import traceback
 
 import jinja2
+import jsonschema
 import routes
-from swagger_spec_validator.validator20 import validate_spec
+from swagger_spec_validator.validator20 import validate_spec, deref
 import yaml
 from webob import exc, Request
 
@@ -30,6 +47,7 @@ class Router(object):
         self.spec_path = spec_path
 
         self.spec = {}
+        self.spec_resolver = None
         self.routes = routes.Mapper()
 
     def add_spec(self, spec_file, default=True, arguments=None):
@@ -50,8 +68,7 @@ class Router(object):
         spec_string = jinja2.Template(spec_template).render(**arguments)
         spec = yaml.load(spec_string)
 
-        validate_spec(copy.deepcopy(spec))
-
+        self.spec_resolver = validate_spec(copy.deepcopy(spec))
         self.spec = spec
 
         for (path, methods) in six.iteritems(spec['paths']):
@@ -98,6 +115,11 @@ class Router(object):
             elif type == 'header':
                 kw[name] = req.headers.get(name)
             elif type == 'body':
+                try:
+                    jsonschema.validate(req.json, deref(param['schema'], self.spec_resolver))
+                except (jsonschema.ValidationError, ValueError) as e:
+                    raise exc.HTTPBadRequest(detail=e.message,
+                                             comment=traceback.format_exc())
                 kw[name] = req.json
             elif type == 'formData':
                 kw[name] = req.POST.get(name)

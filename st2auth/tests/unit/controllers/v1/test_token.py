@@ -17,7 +17,6 @@ import uuid
 import datetime
 import random
 import string
-import unittest
 
 import mock
 from oslo_config import cfg
@@ -130,7 +129,6 @@ class TestTokenController(FunctionalTest):
         )
         self.assertEqual(response.json['faultstring'], message)
 
-    @unittest.skip
     @mock.patch.object(
         User, 'get_by_name',
         mock.MagicMock(return_value=UserDB(name=USERNAME)))
