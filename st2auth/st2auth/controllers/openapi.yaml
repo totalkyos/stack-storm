@@ -8,8 +8,10 @@ info:
   version: "1.0.0"
   title: StackStorm st2auth API
 
+basePath: /v1
+
 paths:
-  /token:
+  /tokens:
     post:
       operationId: st2auth.controllers.v1.auth:token_controller.post
       description: |
@@ -19,7 +21,6 @@ paths:
         - name: authorization
           in: header
           description: base64 encoded string containing login and password
-          required: true
           type: string
         - name: x-forwarded-for
           in: header

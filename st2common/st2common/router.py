@@ -30,9 +30,9 @@ class Router(object):
         self.spec_path = spec_path
 
         self.spec = {}
-        self.routes = None
+        self.routes = routes.Mapper()
 
-    def add_spec(self, spec_file, arguments=None):
+    def add_spec(self, spec_file, default=True, arguments=None):
         LOG.debug('Adding API: %s', spec_file)
 
         arguments = arguments or dict()
@@ -53,23 +53,22 @@ class Router(object):
         validate_spec(copy.deepcopy(spec))
 
         self.spec = spec
-        self.routes = routes.Mapper()
 
         for (path, methods) in six.iteritems(spec['paths']):
             for (method, endpoint) in six.iteritems(methods):
                 conditions = {
                     'method': [method.upper()]
                 }
-                self.routes.connect(path, _api_path=path, _api_method=method, conditions=conditions)
+                m = self.routes.submapper(_api_path=path, _api_method=method, conditions=conditions)
+                m.connect(None, self.spec.get('basePath', '') + path)
+                if default:
+                    m.connect(None, path)
 
         for route in self.routes.matchlist:
             LOG.debug('Route registered: %s %s', route.routepath, route.conditions)
 
     def __call__(self, req):
         """Invoke router as a view."""
-        if self.routes is None:
-            raise exc.HTTPInternalServerError(detail='Router has not been properly initialized')
-
         match = self.routes.match(req.path, req.environ)
 
         if match is None:
