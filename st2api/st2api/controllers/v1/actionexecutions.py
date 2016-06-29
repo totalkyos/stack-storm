@@ -26,7 +26,6 @@ from six.moves import http_client
 
 from st2api.controllers.base import BaseRestControllerMixin
 from st2api.controllers.resource import ResourceController
-from st2api.controllers.v1.executionviews import ExecutionViewsController
 from st2api.controllers.v1.executionviews import SUPPORTED_FILTERS
 from st2common import log as logging
 from st2common.constants.action import LIVEACTION_STATUS_CANCELED, LIVEACTION_STATUS_FAILED
@@ -331,8 +330,6 @@ class ActionExecutionsController(ActionExecutionsControllerMixin, ResourceContro
     """
 
     # Nested controllers
-    views = ExecutionViewsController()
-
     children = ActionExecutionChildrenController()
     attribute = ActionExecutionAttributeController()
     re_run = ActionExecutionReRunController()

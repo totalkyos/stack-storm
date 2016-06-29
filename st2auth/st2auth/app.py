@@ -13,46 +13,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from collections import namedtuple
 import os
 from oslo_config import cfg
 
 from st2auth import config as st2auth_config
-from st2common import hooks
 from st2common import log as logging
-from st2common.router import Router
+from st2common.router import Router, ErrorHandlingMiddleware
 from st2common.util.monkey_patch import monkey_patch
 from st2common.constants.system import VERSION_STRING
 from st2common.service_setup import setup as common_setup
 
 LOG = logging.getLogger(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-
-class ErrorHandlingMiddleware(object):
-    def __init__(self, app):
-        self.app = app
-
-    def __call__(self, environ, start_response):
-        try:
-            resp = self.app(environ, start_response)
-        except Exception as e:
-            # Mostly hacking to avoid making changes to the hook
-            State = namedtuple('State', 'response')
-            Response = namedtuple('Response', 'status headers')
-
-            state = State(
-                response=Response(
-                    status=getattr(e, 'code', 500),
-                    headers={}
-                )
-            )
-
-            if hasattr(e, 'detail') and not getattr(e, 'comment'):
-                setattr(e, 'comment', getattr(e, 'detail'))
-
-            resp = hooks.JSONErrorResponseHook().on_error(state, e)(environ, start_response)
-        return resp
 
 
 def setup_app(config=None):

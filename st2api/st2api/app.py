@@ -18,10 +18,12 @@ import os
 import pecan
 from oslo_config import cfg
 from pecan.middleware.static import StaticFileMiddleware
+from webob import exc
 
 from st2api import config as st2api_config
 from st2common import hooks
 from st2common import log as logging
+from st2common.router import Router, ErrorHandlingMiddleware, NotFoundException
 from st2common.util.monkey_patch import monkey_patch
 from st2common.constants.system import VERSION_STRING
 from st2common.service_setup import setup as common_setup
@@ -87,7 +89,7 @@ def setup_app(config=None):
 
     active_hooks.append(hooks.CorsHook())
 
-    app = pecan.make_app(app_conf.pop('root'),
+    pecan_app = pecan.make_app(app_conf.pop('root'),
                          logging=getattr(config, 'logging', {}),
                          hooks=active_hooks,
                          **app_conf
@@ -95,8 +97,24 @@ def setup_app(config=None):
 
     # Static middleware which servers common static assets such as logos
     static_root = os.path.join(BASE_DIR, 'public')
-    app = StaticFileMiddleware(app=app, directory=static_root)
+    pecan_app = StaticFileMiddleware(app=pecan_app, directory=static_root)
+
+    router = Router(spec_path=os.path.join(BASE_DIR, 'controllers/'),
+                    debug=cfg.CONF.api_pecan.debug)
+    router.add_spec('openapi.yaml')
+
+    router_app = router.as_wsgi
 
     LOG.info('%s app created.' % __name__)
 
-    return app
+    def mux(environ, start_response):
+        try:
+            return router_app(environ, start_response)
+        except NotFoundException:
+            return pecan_app(environ, start_response)
+        except Exception:
+            raise
+
+    mux = ErrorHandlingMiddleware(mux)
+
+    return mux

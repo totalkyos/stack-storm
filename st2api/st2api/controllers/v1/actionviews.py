@@ -65,7 +65,6 @@ class LookupUtils(object):
 
 class ParametersViewController(RestController):
 
-    @jsexpose(arg_types=[str], status_code=http_client.OK)
     def get_one(self, action_id):
         return self._get_one(action_id)
 
@@ -164,6 +163,7 @@ class EntryPointController(resource.ContentPackResourceController):
 
 
 class ActionViewsController(RestController):
-    parameters = ParametersViewController()
     overview = OverviewController()
     entry_point = EntryPointController()
+
+parameters = ParametersViewController()

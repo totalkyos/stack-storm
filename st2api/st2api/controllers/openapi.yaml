@@ -1,0 +1,29 @@
+swagger: '2.0'
+
+info:
+  version: "1.0.0"
+  title: StackStorm st2api API
+
+basePath: /v1
+
+paths:
+  /actions/views/parameters/{action_id}:
+    get:
+      operationId: st2api.controllers.v1.actionviews:parameters.get_one
+      parameters:
+        - name: action_id
+          in: path
+          description: id of the action.
+          type: string
+      responses:
+        default: {}
+  /executions/views/filters:
+    get:
+      operationId: st2api.controllers.v1.executionviews:filters.get_all
+      parameters:
+        - name: types
+          in: query
+          description: Comma delimited string of filter types to output.
+          type: string
+      responses:
+        default: {}

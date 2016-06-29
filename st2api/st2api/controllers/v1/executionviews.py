@@ -17,7 +17,6 @@ from pecan.rest import RestController
 import six
 
 from st2common import log as logging
-from st2common.models.api.base import jsexpose
 from st2common.persistence.execution import ActionExecution
 
 LOG = logging.getLogger(__name__)
@@ -49,12 +48,7 @@ SUPPORTED_FILTERS = {
 IGNORE_FILTERS = ['parent', 'timestamp', 'liveaction', 'trigger_instance']
 
 
-def csv(s):
-    return s.split(',')
-
-
 class FiltersController(RestController):
-    @jsexpose(arg_types=[csv])
     def get_all(self, types=None):
         """
             List all distinct filters.
@@ -65,6 +59,9 @@ class FiltersController(RestController):
             :param types: Comma delimited string of filter types to output.
             :type types: ``str``
         """
+        if types:
+            types = types.split(',')
+
         filters = {}
 
         for name, field in six.iteritems(SUPPORTED_FILTERS):
@@ -74,5 +71,4 @@ class FiltersController(RestController):
         return filters
 
 
-class ExecutionViewsController(RestController):
-    filters = FiltersController()
+filters = FiltersController()

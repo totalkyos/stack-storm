@@ -15,6 +15,7 @@
 
 import copy
 import functools
+from collections import namedtuple
 import os
 import six
 import sys
@@ -25,9 +26,11 @@ import jsonschema
 import routes
 from swagger_spec_validator.validator20 import validate_spec, deref
 import yaml
-from webob import exc, Request
+from webob import exc, Request, Response
 
+from st2common import hooks
 from st2common import log as logging
+from st2common.util.jsonify import json_encode
 
 LOG = logging.getLogger(__name__)
 
@@ -37,6 +40,39 @@ def op_resolver(op_id):
     __import__(module_name)
     module = sys.modules[module_name]
     return functools.reduce(getattr, func_name.split('.'), module)
+
+
+class NotFoundException(Exception):
+    pass
+
+
+class ErrorHandlingMiddleware(object):
+    def __init__(self, app):
+        self.app = app
+
+    def __call__(self, environ, start_response):
+        try:
+            try:
+                resp = self.app(environ, start_response)
+            except NotFoundException:
+                raise exc.HTTPNotFound()
+        except Exception as e:
+            # Mostly hacking to avoid making changes to the hook
+            State = namedtuple('State', 'response')
+            Response = namedtuple('Response', 'status headers')
+
+            state = State(
+                response=Response(
+                    status=getattr(e, 'code', 500),
+                    headers={}
+                )
+            )
+
+            if hasattr(e, 'detail') and not getattr(e, 'comment'):
+                setattr(e, 'comment', getattr(e, 'detail'))
+
+            resp = hooks.JSONErrorResponseHook().on_error(state, e)(environ, start_response)
+        return resp
 
 
 class Router(object):
@@ -89,7 +125,7 @@ class Router(object):
         match = self.routes.match(req.path, req.environ)
 
         if match is None:
-            raise exc.HTTPNotFound()
+            raise NotFoundException
 
         # To account for situation when match may return multiple values
         try:
@@ -103,7 +139,7 @@ class Router(object):
         func = op_resolver(endpoint['operationId'])
         kw = {}
 
-        for param in endpoint['parameters'] + endpoint.get('x-parameters', []):
+        for param in endpoint.get('parameters', []) + endpoint.get('x-parameters', []):
             name = param['name']
             type = param['in']
             required = param.get('required', False)
@@ -133,6 +169,9 @@ class Router(object):
         resp = func(**kw)
 
         if resp is not None:
+            if not hasattr(resp, '__call__'):
+                resp = Response(json_encode(resp), content_type='application/json')
+
             return resp
 
     def as_wsgi(self, environ, start_response):
